@@ -1,0 +1,87 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  lint:
+    name: Lint Ansible
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Ansible tools
+        run: pip install ansible ansible-lint
+
+      - name: Check Ansible syntax
+        working-directory: devops-ai-assistant/10_Implementation/01_vm
+        run: cd ansible && ansible-playbook playbook.yml --syntax-check
+
+      - name: Run ansible-lint
+        run: ansible-lint --profile min devops-ai-assistant/10_Implementation/01_vm/ansible/playbook.yml
+
+  test:
+    name: Test Flask app
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Python dependencies
+        run: pip install -r devops-ai-assistant/10_Implementation/01_vm/requirements-dev.txt
+
+      - name: Run tests
+        working-directory: devops-ai-assistant/10_Implementation/01_vm
+        run: pytest -q
+
+  deploy:
+    name: Deploy with Ansible
+    needs: [lint, test]
+    if: github.ref == 'refs/heads/main' && vars.ENABLE_DEPLOY == 'true' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    runs-on: self-hosted
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Ansible
+        run: pip install ansible
+
+      - name: Configure SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H "${{ secrets.SERVER_IP }}" >> ~/.ssh/known_hosts
+
+      - name: Create CI inventory
+        run: |
+          cat > devops-ai-assistant/10_Implementation/01_vm/ansible/ci_inventory.ini <<EOF
+          [devservers]
+          devvm ansible_host=${{ secrets.SERVER_IP }} ansible_user=${{ secrets.SERVER_USER }} ansible_ssh_private_key_file=$HOME/.ssh/deploy_key
+          EOF
+
+      - name: Run Ansible deploy
+        run: ansible-playbook -i devops-ai-assistant/10_Implementation/01_vm/ansible/ci_inventory.ini devops-ai-assistant/10_Implementation/01_vm/ansible/playbook.yml -e "db_password=${{ secrets.POSTGRES_PASSWORD }}"
