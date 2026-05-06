@@ -49,7 +49,7 @@ jobs:
 
       - name: Run tests
         working-directory: devops-ai-assistant/10_Implementation/01_vm
-        run: pytest -q
+        run: python3 -m pytest -q
 
   deploy:
     name: Deploy with Ansible
