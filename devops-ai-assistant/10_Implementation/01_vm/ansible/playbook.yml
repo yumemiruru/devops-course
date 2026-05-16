@@ -106,6 +106,56 @@
       args:
         chdir: "{{ app_dir }}/devops-ai-assistant/10_Implementation/01_vm"
 
+    - name: Скопіювати скрипт моніторингу
+      copy:
+        src: ../monitor.sh
+        dest: "{{ app_dir }}/monitor.sh"
+        owner: "{{ app_user }}"
+        group: "{{ app_user }}"
+        mode: '0755'
+
+    - name: Переконатися, що лог-файл моніторингу існує
+      file:
+        path: "{{ app_dir }}/monitor.log"
+        state: touch
+        owner: "{{ app_user }}"
+        group: "{{ app_user }}"
+        mode: '0644'
+
+    - name: Скопіювати unit-файл monitor.service
+      copy:
+        src: ../monitor.service
+        dest: /etc/systemd/system/monitor.service
+        owner: root
+        group: root
+        mode: '0644'
+      notify:
+        - Reload systemd
+
+    - name: Скопіювати unit-файл monitor.timer
+      copy:
+        src: ../monitor.timer
+        dest: /etc/systemd/system/monitor.timer
+        owner: root
+        group: root
+        mode: '0644'
+      notify:
+        - Reload systemd
+
+    - name: Скопіювати конфігурацію logrotate для моніторингу
+      copy:
+        src: ../monitor-logrotate
+        dest: /etc/logrotate.d/monitor
+        owner: root
+        group: root
+        mode: '0644'
+
+    - name: Активувати monitor.timer
+      systemd:
+        name: monitor.timer
+        enabled: yes
+        state: started
+
   handlers:
     - name: Reload systemd
       systemd:
